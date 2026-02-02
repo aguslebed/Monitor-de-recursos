@@ -3,6 +3,7 @@ from PySide6.QtCore import *
 from PySide6.QtGui import *
 from PySide6.QtCharts import *
 import sys
+from linearChart import LinearChart
 
 class SystemMonitor(QMainWindow):
     def __init__(self):
@@ -35,31 +36,18 @@ class SystemMonitor(QMainWindow):
         self.contentFrame.setGeometry(150, 0, 650, 600)
         self.contentFrame.setStyleSheet("background-color: #7A7A7A;")
 
-        self.series = QLineSeries()
-        self.series.append(0, 6)
-        self.series.append(2, 4)
-        self.series.append(3, 8)
-        self.series.append(7, 4)
-        self.series.append(10, 5)
+        cpu_chart = LinearChart("CPU Usage")
+        cpu_chart.add_data_point(0, 30)
+        cpu_chart.add_data_point(1, 50)
+        cpu_chart.add_data_point(2, 40)
+        cpu_chart.add_data_point(3, 70)
+        cpu_chart.add_data_point(4, 60)     
+        
 
-        self.chart = QChart()
-        self.chart.legend().hide()
-        self.chart.addSeries(self.series)
-        self.chart.createDefaultAxes()
-        self.chart.setTitle("Uso CPU (%)")
-        self.chart.setMargins(QMargins(0, 0, 0, 0))
-        self.chart.setBackgroundRoundness(0)
-        self.chart.setBackgroundVisible(False)
-        self.chart.setBackgroundBrush(QBrush(QColor("#7A7A7A")))
-        self.chart.axes(Qt.Horizontal)[0].setVisible(False)
-        self.chart.axes(Qt.Vertical)[0].setVisible(False)
+        layout = QVBoxLayout(self.contentFrame)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(cpu_chart)
 
-
-
-        self._chart_view = QChartView(self.chart, self.contentFrame)
-        self._chart_view.setContentsMargins(0, 0, 0, 0)
-        self._chart_view.setGeometry(25, 25, 600, 100)
-        self._chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
 
 
 app = QApplication(sys.argv)
