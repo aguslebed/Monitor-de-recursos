@@ -92,11 +92,10 @@ class SystemMonitor(QMainWindow):
         layout.addWidget(self.disk_chart)
         layout.addWidget(self.net_chart)
         
-        # Iniciar actualización periódica (cada 1000ms = 1s)
+        # Iniciar actualización periódica (cada 100ms)
         if not self.timer.isActive():
             self.timer.start(100)
-
-    
+4  
     def update_charts(self):
         # interval=0 es vital para que no bloquee la interfaz
         
