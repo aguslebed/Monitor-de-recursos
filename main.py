@@ -84,13 +84,11 @@ class SystemMonitor(QMainWindow):
         # =========================
         self.cpu_chart = LinearChart("CPU Usage", y_range=(0, 100))
         self.mem_chart = LinearChart("Memory Usage", y_range=(0, 100))
-        self.gpu_chart = LinearChart("GPU Usage", y_range=(0, 100))
         self.disk_chart = LinearChart("Disk Usage", y_range=(0, 100))
         self.net_chart = LinearChart("Network Usage")
         
         layout.addWidget(self.cpu_chart)
         layout.addWidget(self.mem_chart)
-        layout.addWidget(self.gpu_chart)
         layout.addWidget(self.disk_chart)
         layout.addWidget(self.net_chart)
         
@@ -131,10 +129,9 @@ class SystemMonitor(QMainWindow):
         # 3. Actualizar Graficos (Todos usan el mismo tiempo 'now')
         self.cpu_chart.add_data_point(now, avg_cpu)
         self.mem_chart.add_data_point(now, mem_usage)
-        # self.gpu_chart.add_data_point(now, psutil.gpu_percent(interval=0)) 
+        #self.gpu_chart.add_data_point(now) 
         self.disk_chart.add_data_point(now, disk_usage)
         self.net_chart.add_data_point(now, net_sent_speed)
-
 
     def clear_layout(self, layout):
         if layout is not None:
@@ -143,6 +140,8 @@ class SystemMonitor(QMainWindow):
                 widget = item.widget()
                 if widget is not None:
                     widget.deleteLater()
+
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

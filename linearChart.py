@@ -36,13 +36,16 @@ class LinearChart(QWidget):
         self.axisX.setVisible(False)
         
         # Configuracion del Eje Y
+        # Siempre visible y blanco
+        self.axisY.setVisible(True)
+        self.axisY.setLabelsColor(QColor("white"))
+
         if self.y_range:
             self.axisY.setRange(self.y_range[0], self.y_range[1])
-            self.axisY.setVisible(True)
-            self.axisY.setLabelsColor(QColor("white"))
             self.axisY.setTickCount(6) # 0, 20, 40, 60, 80, 100
         else:
-            self.axisY.setVisible(False)
+            # Si es dinamico (Red), dejamos que Qt o nuestra logica maneje los ticks
+            pass
 
         # Agregamos los ejes al grafico
         self.chart.addAxis(self.axisX, Qt.AlignBottom)
