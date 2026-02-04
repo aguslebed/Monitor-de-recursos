@@ -2,9 +2,9 @@ import sys
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QFrame, QPushButton,
-    QHBoxLayout, QVBoxLayout
+    QHBoxLayout, QVBoxLayout, QGridLayout, QLabel, QScrollArea
 )
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Qt
 from linearChart import LinearChart
 import psutil
 import time
@@ -37,8 +37,6 @@ class SystemMonitor(QMainWindow):
         contentLayout.setContentsMargins(10, 10, 10, 10)
         contentLayout.setSpacing(10)
 
-
-
         # =========================
         # MENU LATERAL
         # =========================
@@ -59,6 +57,8 @@ class SystemMonitor(QMainWindow):
             if text == "Recursos":
                 # Conectar sin pasar argumentos extra que confundan (el booleano de clicked)
                 btn.clicked.connect(self.create_usage_charts)
+            elif text == "Procesos":
+                btn.clicked.connect(self.create_process_list)
 
         menuLayout.addStretch()
 
@@ -72,7 +72,7 @@ class SystemMonitor(QMainWindow):
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_charts)
 
-    def create_usage_charts(self):
+    def create_usage_charts(self, layout):
         # Obtener el layout directamente del frame
         layout = self.contentFrame.layout()
         
@@ -95,8 +95,84 @@ class SystemMonitor(QMainWindow):
         # Iniciar actualización periódica (cada 100ms)
         if not self.timer.isActive():
             self.timer.start(100)
-4  
+  
+    def create_process_list(self, layout):
+        # Detener el timer porque update_charts fallará si no están los gráficos
+        self.timer.stop()
+
+        # Obtener el layout directamente del frame
+        layout = self.contentFrame.layout()
+        
+        # Limpiar lo que hubiera antes
+        self.clear_layout(layout)
+        
+        # =========================
+        # LISTA DE PROCESOS (Scroll Area)
+        # =========================
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        # Estilo para que no se vea el borde del scroll area si no se quiere
+        scroll.setFrameShape(QFrame.NoFrame)
+        
+        container = QWidget()
+        scroll.setWidget(container)
+        
+        # Grid dentro del container del scroll
+        grid = QGridLayout(container)
+        grid.setAlignment(Qt.AlignTop) # Para que las filas no se expandan verticalmente
+        
+        layout.addWidget(scroll)
+
+        pids = psutil.pids()
+        procesos_info = []
+        
+        # Use oneshot para optimizar si es posible, pero simple por ahora.
+        # Lo más importante es interval=0 o None para NO BLOQUEAR.
+        for pid in pids:
+            try:
+                proceso = psutil.Process(pid)
+                # interval=0.0 o None devuelve el valor inmediato (no bloqueante)
+                # La primera vez puede dar 0.0 si no se ha medido antes.
+                cpu = proceso.cpu_percent(interval=None) 
+                
+                info = {
+                    'pid': pid,
+                    'nombre': proceso.name(),
+                    'usuario': proceso.username(),
+                    'cpu_percent': cpu,
+                    'mem_rss': proceso.memory_info().rss / (1024 * 1024) # MB
+                }
+                procesos_info.append(info)
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+        
+        # Opcional: ordenar por uso de memoria
+        procesos_info.sort(key=lambda x: x['mem_rss'], reverse=True)
+
+        # Headers
+        headers = ["PID", "Nombre", "Usuario", "CPU %", "Memoria (MB)"]
+        for col, h in enumerate(headers):
+            lbl = QLabel(f"<b>{h}</b>")
+            lbl.setStyleSheet("color: white; font-size: 14px;")
+            grid.addWidget(lbl, 0, col)
+
+        for i, proceso in enumerate(procesos_info):
+            row = i + 1
+            # Estilo alterno o simple
+            
+            grid.addWidget(QLabel(str(proceso['pid'])), row, 0)
+            grid.addWidget(QLabel(proceso['nombre']), row, 1)
+            grid.addWidget(QLabel(proceso['usuario']), row, 2)
+            grid.addWidget(QLabel(f"{proceso['cpu_percent']:.1f}%"), row, 3)
+            grid.addWidget(QLabel(f"{proceso['mem_rss']:.1f} MB"), row, 4)
+            
+        # NO reiniciamos el timer aquí porque este método no actualiza en tiempo real por ahora
+
     def update_charts(self):
+        # Verificar que los graficos existan antes de actualizar
+        if not hasattr(self, 'cpu_chart'):
+            return
+
         # interval=0 es vital para que no bloquee la interfaz
         
         # 1. Obtener datos
@@ -123,14 +199,14 @@ class SystemMonitor(QMainWindow):
         # 2. Calcular promedios/totales
         avg_cpu = sum(cores_usage) / len(cores_usage) if cores_usage else 0
         
-        print(f"Update: CPU={avg_cpu:.1f}% MEM={mem_usage}% NET={net_sent_speed:.2f}MB/s")
+        # print(f"Update: CPU={avg_cpu:.1f}% MEM={mem_usage}% NET={net_sent_speed:.2f}MB/s")
         
         # 3. Actualizar Graficos (Todos usan el mismo tiempo 'now')
-        self.cpu_chart.add_data_point(now, avg_cpu)
-        self.mem_chart.add_data_point(now, mem_usage)
+        if hasattr(self, 'cpu_chart'): self.cpu_chart.add_data_point(now, avg_cpu)
+        if hasattr(self, 'mem_chart'): self.mem_chart.add_data_point(now, mem_usage)
         #self.gpu_chart.add_data_point(now) 
-        self.disk_chart.add_data_point(now, disk_usage)
-        self.net_chart.add_data_point(now, net_sent_speed)
+        if hasattr(self, 'disk_chart'): self.disk_chart.add_data_point(now, disk_usage)
+        if hasattr(self, 'net_chart'): self.net_chart.add_data_point(now, net_sent_speed)
 
     def clear_layout(self, layout):
         if layout is not None:
