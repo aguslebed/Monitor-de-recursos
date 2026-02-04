@@ -2,7 +2,8 @@ import sys
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QFrame, QPushButton,
-    QHBoxLayout, QVBoxLayout, QGridLayout, QLabel, QScrollArea
+    QHBoxLayout, QVBoxLayout, QGridLayout, QLabel, QScrollArea,
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView
 )
 from PySide6.QtCore import QTimer, Qt
 from linearChart import LinearChart
@@ -48,7 +49,7 @@ class SystemMonitor(QMainWindow):
         menuLayout.setContentsMargins(0, 10, 0, 0)
         menuLayout.setSpacing(10)
 
-        for text in ["Recursos", "Procesos", "Componentes", "Temperaturas"]:
+        for text in ["Recursos", "processs", "Componentes", "Temperaturas"]:
             btn = QPushButton(text)
             btn.setFixedHeight(50)
             btn.setStyleSheet("background-color: #5A5A5A;")
@@ -57,7 +58,7 @@ class SystemMonitor(QMainWindow):
             if text == "Recursos":
                 # Conectar sin pasar argumentos extra que confundan (el booleano de clicked)
                 btn.clicked.connect(self.create_usage_charts)
-            elif text == "Procesos":
+            elif text == "processs":
                 btn.clicked.connect(self.create_process_list)
 
         menuLayout.addStretch()
@@ -82,7 +83,7 @@ class SystemMonitor(QMainWindow):
         # =========================
         # GRAFICOS
         # =========================
-        self.cpu_chart = LinearChart("CPU Usage", y_range=(0, 100))
+        self.cpu_chart = LinearChart("CPU Usage (avg)", y_range=(0, 100))
         self.mem_chart = LinearChart("Memory Usage", y_range=(0, 100))
         self.disk_chart = LinearChart("Disk Usage", y_range=(0, 100))
         self.net_chart = LinearChart("Network Usage")
@@ -107,64 +108,78 @@ class SystemMonitor(QMainWindow):
         self.clear_layout(layout)
         
         # =========================
-        # LISTA DE PROCESOS (Scroll Area)
+        # LISTA DE PROCESOS (Tabla)
         # =========================
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        # Estilo para que no se vea el borde del scroll area si no se quiere
-        scroll.setFrameShape(QFrame.NoFrame)
+        table = QTableWidget()
+        layout.addWidget(table)
         
-        container = QWidget()
-        scroll.setWidget(container)
+        # Configurar columnas
+        headers = ["PID", "Name", "User", "% CPU", "Memory usage"]
+        table.setColumnCount(len(headers))
+        table.setHorizontalHeaderLabels(headers)
         
-        # Grid dentro del container del scroll
-        grid = QGridLayout(container)
-        grid.setAlignment(Qt.AlignTop) # Para que las filas no se expandan verticalmente
+        # Estilo de tabla
+        table.setStyleSheet("""
+            QTableWidget {
+                background-color: #333;
+                color: white;
+                gridline-color: #555;
+                font-family: Arial;
+                font-size: 13px;
+            }
+            QHeaderView::section {
+                background-color: #444;
+                color: white;
+                padding: 4px;
+                border: 1px solid #555;
+            }
+        """)
         
-        layout.addWidget(scroll)
+        # Propiedades de comportamiento
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
 
         pids = psutil.pids()
-        procesos_info = []
+        process_info = []
         
         # Use oneshot para optimizar si es posible, pero simple por ahora.
         # Lo más importante es interval=0 o None para NO BLOQUEAR.
         for pid in pids:
             try:
-                proceso = psutil.Process(pid)
+                process = psutil.Process(pid)
                 # interval=0.0 o None devuelve el valor inmediato (no bloqueante)
                 # La primera vez puede dar 0.0 si no se ha medido antes.
-                cpu = proceso.cpu_percent(interval=None) 
+                cpu = process.cpu_percent(interval=None) 
                 
                 info = {
-                    'pid': pid,
-                    'nombre': proceso.name(),
-                    'usuario': proceso.username(),
-                    'cpu_percent': cpu,
-                    'mem_rss': proceso.memory_info().rss / (1024 * 1024) # MB
+                    'PID': pid,
+                    'Name': process.name(),
+                    'User': process.username(),
+                    '% CPU': cpu,
+                    'Memory usage': process.memory_info().rss / (1024 * 1024) # MB
                 }
-                procesos_info.append(info)
+                process_info.append(info)
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
         
         # Opcional: ordenar por uso de memoria
-        procesos_info.sort(key=lambda x: x['mem_rss'], reverse=True)
+        process_info.sort(key=lambda x: x['Memory usage'], reverse=True)
 
-        # Headers
-        headers = ["PID", "Nombre", "Usuario", "CPU %", "Memoria (MB)"]
-        for col, h in enumerate(headers):
-            lbl = QLabel(f"<b>{h}</b>")
-            lbl.setStyleSheet("color: white; font-size: 14px;")
-            grid.addWidget(lbl, 0, col)
-
-        for i, proceso in enumerate(procesos_info):
-            row = i + 1
-            # Estilo alterno o simple
-            
-            grid.addWidget(QLabel(str(proceso['pid'])), row, 0)
-            grid.addWidget(QLabel(proceso['nombre']), row, 1)
-            grid.addWidget(QLabel(proceso['usuario']), row, 2)
-            grid.addWidget(QLabel(f"{proceso['cpu_percent']:.1f}%"), row, 3)
-            grid.addWidget(QLabel(f"{proceso['mem_rss']:.1f} MB"), row, 4)
+        # Llenar tabla
+        table.setRowCount(len(process_info))
+        for row, info in enumerate(process_info):
+            # PID
+            table.setItem(row, 0, QTableWidgetItem(str(info['PID'])))
+            # Name
+            table.setItem(row, 1, QTableWidgetItem(str(info['Name'])))
+            # User
+            table.setItem(row, 2, QTableWidgetItem(str(info['User'])))
+            # CPU
+            table.setItem(row, 3, QTableWidgetItem(f"{info['% CPU']:.1f}%"))
+            # Memoria
+            table.setItem(row, 4, QTableWidgetItem(f"{info['Memory usage']:.1f} MB"))
             
         # NO reiniciamos el timer aquí porque este método no actualiza en tiempo real por ahora
 
