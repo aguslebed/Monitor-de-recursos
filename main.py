@@ -1,9 +1,9 @@
-import sys
+import sys, os
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
     QFrame, QPushButton,
     QHBoxLayout, QVBoxLayout, QGridLayout, QLabel, QScrollArea,
-    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QMenu
 )
 from PySide6.QtCore import QTimer, Qt
 from linearChart import LinearChart
@@ -70,8 +70,11 @@ class SystemMonitor(QMainWindow):
         mainLayout.addWidget(self.contentFrame)
 
         # Timer para evitar el bloqueo de la UI
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_charts)
+        self.chart_timer = QTimer()
+        self.chart_timer.timeout.connect(self.update_charts)
+
+        self.process_timer = QTimer()
+        self.process_timer.timeout.connect(self.update_process_list)    
 
     def create_usage_charts(self, layout):
         # Obtener el layout directamente del frame
@@ -94,12 +97,12 @@ class SystemMonitor(QMainWindow):
         layout.addWidget(self.net_chart)
         
         # Iniciar actualización periódica (cada 100ms)
-        if not self.timer.isActive():
-            self.timer.start(100)
+        if not self.chart_timer.isActive():
+            self.chart_timer.start(100)
   
-    def create_process_list(self, layout):
+    def create_process_list(self):
         # Detener el timer porque update_charts fallará si no están los gráficos
-        self.timer.stop()
+        self.process_timer.stop()
 
         # Obtener el layout directamente del frame
         layout = self.contentFrame.layout()
@@ -110,16 +113,16 @@ class SystemMonitor(QMainWindow):
         # =========================
         # LISTA DE PROCESOS (Tabla)
         # =========================
-        table = QTableWidget()
-        layout.addWidget(table)
+        self.table = QTableWidget()
+        layout.addWidget(self.table)
         
         # Configurar columnas
         headers = ["PID", "Name", "User", "% CPU", "Memory usage"]
-        table.setColumnCount(len(headers))
-        table.setHorizontalHeaderLabels(headers)
+        self.table.setColumnCount(len(headers))
+        self.table.setHorizontalHeaderLabels(headers)
         
         # Estilo de tabla
-        table.setStyleSheet("""
+        self.table.setStyleSheet("""
             QTableWidget {
                 background-color: #333;
                 color: white;
@@ -136,14 +139,35 @@ class SystemMonitor(QMainWindow):
         """)
         
         # Propiedades de comportamiento
-        table.verticalHeader().setVisible(False)
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self.show_context_menu)
 
+        process_info = self.find_process_info()
+        self.update_process_list(process_info)
+
+    def update_process_list(self, process_info):
+         # Llenar tabla
+        self.table.setRowCount(len(process_info))
+        for row, info in enumerate(process_info):
+
+            # PID
+            self.table.setItem(row, 0, QTableWidgetItem(str(info['PID'])))
+            # Name
+            self.table.setItem(row, 1, QTableWidgetItem(str(info['Name'])))
+            # User
+            self.table.setItem(row, 2, QTableWidgetItem(str(info['User'])))
+            # CPU
+            self.table.setItem(row, 3, QTableWidgetItem(f"{info['% CPU']:.1f}%"))
+            # Memoria
+            self.table.setItem(row, 4, QTableWidgetItem(f"{info['Memory usage']:.1f} MB"))
+
+    def find_process_info(self, order_by=None):
         pids = psutil.pids()
-        process_info = []
-        
+        process_info = []   
         # Use oneshot para optimizar si es posible, pero simple por ahora.
         # Lo más importante es interval=0 o None para NO BLOQUEAR.
         for pid in pids:
@@ -165,23 +189,17 @@ class SystemMonitor(QMainWindow):
                 pass
         
         # Opcional: ordenar por uso de memoria
-        process_info.sort(key=lambda x: x['Memory usage'], reverse=True)
-
-        # Llenar tabla
-        table.setRowCount(len(process_info))
-        for row, info in enumerate(process_info):
-            # PID
-            table.setItem(row, 0, QTableWidgetItem(str(info['PID'])))
-            # Name
-            table.setItem(row, 1, QTableWidgetItem(str(info['Name'])))
-            # User
-            table.setItem(row, 2, QTableWidgetItem(str(info['User'])))
-            # CPU
-            table.setItem(row, 3, QTableWidgetItem(f"{info['% CPU']:.1f}%"))
-            # Memoria
-            table.setItem(row, 4, QTableWidgetItem(f"{info['Memory usage']:.1f} MB"))
-            
-        # NO reiniciamos el timer aquí porque este método no actualiza en tiempo real por ahora
+        if order_by == "Memory":
+            process_info.sort(key=lambda x: x['Memory usage'], reverse=True)
+        elif order_by == "CPU":
+            process_info.sort(key=lambda x: x['% CPU'], reverse=True)
+        elif order_by == "PID":
+            process_info.sort(key=lambda x: x['PID'], reverse=True)
+        elif order_by == "Name":
+            process_info.sort(key=lambda x: x['Name'], reverse=True)
+        elif order_by == "User":
+            process_info.sort(key=lambda x: x['User'], reverse=True)
+        return process_info
 
     def update_charts(self):
         # Verificar que los graficos existan antes de actualizar
@@ -223,6 +241,10 @@ class SystemMonitor(QMainWindow):
         if hasattr(self, 'disk_chart'): self.disk_chart.add_data_point(now, disk_usage)
         if hasattr(self, 'net_chart'): self.net_chart.add_data_point(now, net_sent_speed)
 
+        # Iniciar actualización periódica (cada 100ms)
+        if not self.process_timer.isActive():
+            self.chartprocess_timer_timer.start(100)
+    
     def clear_layout(self, layout):
         if layout is not None:
             while layout.count():
@@ -231,6 +253,26 @@ class SystemMonitor(QMainWindow):
                 if widget is not None:
                     widget.deleteLater()
 
+    def show_context_menu(self, position):
+        item = self.table.itemAt(position)
+        print(item)
+        if item is None:
+            return
+
+        fila = item.row()
+        pid = self.table.item(fila,0).text()
+
+        menu = QMenu(self)
+        menu.addAction("Kill Process", lambda: self.kill_process(pid))
+        menu.exec(self.table.mapToGlobal(position))
+        process_info = self.find_process_info()
+        self.update_process_list(process_info)
+
+    def kill_process(self, pid):
+        try:
+            os.kill(int(pid), 9)
+        except Exception as e:
+            print(f"Error al matar el proceso: {e}")
 
 
 if __name__ == "__main__":
