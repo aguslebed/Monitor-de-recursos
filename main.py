@@ -101,8 +101,8 @@ class SystemMonitor(QMainWindow):
             self.chart_timer.start(100)
   
     def create_process_list(self):
-        # Detener el timer porque update_charts fallará si no están los gráficos
-        self.process_timer.stop()
+        # Detener el timer de graficos
+        self.chart_timer.stop()
 
         # Obtener el layout directamente del frame
         layout = self.contentFrame.layout()
@@ -146,11 +146,21 @@ class SystemMonitor(QMainWindow):
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.show_context_menu)
 
-        process_info = self.find_process_info()
-        self.update_process_list(process_info)
+        # Cargar primera vez
+        self.update_process_list()
+        
+        # Iniciar actualización periódica (cada 3 segundos para no saturar)
+        if not self.process_timer.isActive():
+            self.process_timer.start(3000)
 
-    def update_process_list(self, process_info):
+    def update_process_list(self, process_info=None):
+        if process_info is None:
+            process_info = self.find_process_info()
+
          # Llenar tabla
+        # Guardar scroll actual para intentar mantenerlo (opcional, mejora UX)
+        current_scroll = self.table.verticalScrollBar().value()
+        
         self.table.setRowCount(len(process_info))
         for row, info in enumerate(process_info):
 
@@ -164,17 +174,16 @@ class SystemMonitor(QMainWindow):
             self.table.setItem(row, 3, QTableWidgetItem(f"{info['% CPU']:.1f}%"))
             # Memoria
             self.table.setItem(row, 4, QTableWidgetItem(f"{info['Memory usage']:.1f} MB"))
+            
+        self.table.verticalScrollBar().setValue(current_scroll)
 
     def find_process_info(self, order_by=None):
         pids = psutil.pids()
         process_info = []   
-        # Use oneshot para optimizar si es posible, pero simple por ahora.
-        # Lo más importante es interval=0 o None para NO BLOQUEAR.
         for pid in pids:
             try:
                 process = psutil.Process(pid)
-                # interval=0.0 o None devuelve el valor inmediato (no bloqueante)
-                # La primera vez puede dar 0.0 si no se ha medido antes.
+                # interval=None devuelve el valor inmediato
                 cpu = process.cpu_percent(interval=None) 
                 
                 info = {
@@ -199,6 +208,11 @@ class SystemMonitor(QMainWindow):
             process_info.sort(key=lambda x: x['Name'], reverse=True)
         elif order_by == "User":
             process_info.sort(key=lambda x: x['User'], reverse=True)
+        
+        # Por defecto ordenar por memoria si no se especifica, para que se vea interesante
+        if order_by is None:
+             process_info.sort(key=lambda x: x['Memory usage'], reverse=True)
+             
         return process_info
 
     def update_charts(self):
@@ -232,18 +246,11 @@ class SystemMonitor(QMainWindow):
         # 2. Calcular promedios/totales
         avg_cpu = sum(cores_usage) / len(cores_usage) if cores_usage else 0
         
-        # print(f"Update: CPU={avg_cpu:.1f}% MEM={mem_usage}% NET={net_sent_speed:.2f}MB/s")
-        
         # 3. Actualizar Graficos (Todos usan el mismo tiempo 'now')
         if hasattr(self, 'cpu_chart'): self.cpu_chart.add_data_point(now, avg_cpu)
         if hasattr(self, 'mem_chart'): self.mem_chart.add_data_point(now, mem_usage)
-        #self.gpu_chart.add_data_point(now) 
         if hasattr(self, 'disk_chart'): self.disk_chart.add_data_point(now, disk_usage)
         if hasattr(self, 'net_chart'): self.net_chart.add_data_point(now, net_sent_speed)
-
-        # Iniciar actualización periódica (cada 100ms)
-        if not self.process_timer.isActive():
-            self.chartprocess_timer_timer.start(100)
     
     def clear_layout(self, layout):
         if layout is not None:
